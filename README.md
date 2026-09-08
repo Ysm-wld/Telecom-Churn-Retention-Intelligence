@@ -166,17 +166,17 @@ After merging:
 
 The target is therefore close to balanced, but **PR-AUC remains the primary ranking metric** because the business problem is targeted retention rather than generic accuracy maximization.
 
-<div style="display:flex; align-items:flex-start; gap:2%;">
-
+<p align="center">
   <img src="outputs/figures/02_target_balance.png"
-       style="width:48%; height:270px; object-fit:contain;"
+       width="48%"
+       height="270"
        alt="Target class balance">
 
   <img src="outputs/figures/01_missingness_profile.png"
-       style="width:48%; height:270px; object-fit:contain;"
+       width="48%"
+       height="270"
        alt="Missingness profile across the telecom dataset">
-
-</div>
+</p>
 
 ### Missingness profile
 
