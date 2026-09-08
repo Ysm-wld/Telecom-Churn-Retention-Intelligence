@@ -1,1608 +1,1099 @@
 # Telecom Customer Churn & Retention Intelligence
+
 ## From Churn Prediction to Retention Decisions
 
-> **A churn model tells you who might leave. Telecom Customer Churn & Retention Intelligence determines who is worth saving — and why.**
+> **A churn model tells you who might leave. A retention intelligence system determines who should be prioritized, why they matter, when to intervene, and whether the intervention is economically justified.**
 
-Telecom Customer Churn & Retention Intelligence is an **end-to-end customer retention decision-intelligence system** built on a 100,000-customer US telecom dataset. It combines statistical analysis, domain-driven feature engineering, behavioral segmentation, machine-learning benchmarking, Optuna optimization, ensemble modeling, customer-value prioritization, and cost-aware retention economics.
+This project builds an end-to-end telecom churn and retention decision system that connects **data quality, exploratory analysis, statistical evidence, feature engineering, customer segmentation, supervised learning, hyperparameter optimization, ensemble modeling, model interpretation, customer value, and retention economics**.
 
-The project deliberately goes beyond:
+The analytical journey is deliberately broader than classification:
 
-```text
-Customer → Churn Probability
+**Predict → Prioritize → Intervene → Measure**
+
+The final output is not only a churn probability. It is a ranked retention opportunity built from **risk + customer value + actionability + modeled economics**.
+
+> **Scientific discipline:** the model predicts churn risk and the economic layer models expected value. Neither the retention intervention nor its ROI has been causally validated in an experiment.
+
+---
+
+## Executive Snapshot
+
+<table>
+<tr>
+<td align="center"><strong>100K</strong><br/>customers</td>
+<td align="center"><strong>100</strong><br/>raw fields</td>
+<td align="center"><strong>22</strong><br/>engineered features</td>
+<td align="center"><strong>5</strong><br/>model families</td>
+</tr>
+<tr>
+<td align="center"><strong>50</strong><br/>Optuna trials</td>
+<td align="center"><strong>0.6850</strong><br/>holdout PR-AUC</td>
+<td align="center"><strong>91.0%</strong><br/>holdout recall</td>
+<td align="center"><strong>1.59×</strong><br/>lift @ top 10%</td>
+</tr>
+</table>
+
+**Champion:** `ValidationWeightedEnsemble`
+**Holdout:** 20,000 customers
+**Modeled Base Case:** 2,000 targeted customers → **$130K** campaign cost → **$783.7K** modeled net value → **6.03×** modeled ROI
+
+### The project in one view
+
+```mermaid
+flowchart LR
+    A["BUSINESS<br/>QUESTION"] --> B["DATA<br/>100K CUSTOMERS"]
+    B --> C["STATISTICAL<br/>EVIDENCE"]
+    C --> D["FEATURE<br/>ENGINEERING"]
+    D --> E["ML<br/>MODELING"]
+    E --> F["DECISION<br/>INTELLIGENCE"]
+    F --> G["BUSINESS<br/>IMPACT"]
+
+    classDef base fill:#24292f,color:#fff,stroke:#24292f;
+    classDef decision fill:#0f8b8d,color:#fff,stroke:#0f8b8d;
+    classDef outcome fill:#1a7f37,color:#fff,stroke:#1a7f37;
+    class A,B,C,D,E base;
+    class F decision;
+    class G outcome;
 ```
 
-and builds:
+The executive architecture is intentionally compact: it shows the complete analytical chain without turning the overview into a model catalog.
 
-```text
-Customer Data
-     ↓
-Statistical Evidence
-     ↓
-Feature Engineering
-     ↓
-Behavioral Segmentation
-     ↓
-Model Benchmarking
-     ↓
-Hyperparameter Optimization
-     ↓
-Ensemble Churn Scoring
-     ↓
-Customer Value
-     ↓
-Expected Net Value
-     ↓
-Retention Priority
-     ↓
-Actionable Intervention
-     ↓
-Business Impact
+---
+
+## 1. Why This Project Matters
+
+Traditional churn analytics often stops at:
+
+> **“This customer has a high probability of churning.”**
+
+A retention team still needs to answer:
+
+* Is the customer valuable enough to prioritize?
+* Is there an actionable reason to intervene?
+* What intervention should be considered?
+* What does the intervention cost?
+* What value could plausibly be preserved?
+
+This project therefore separates **prediction** from **decisioning**:
+
+**Churn risk** + **customer value** + **actionability** → **retention priority**
+
+The distinction is central to the project. The classifier estimates risk; the decision layer determines how that risk can be translated into a constrained retention strategy.
+
+---
+
+## 2. Business Problem & Hypothesis
+
+Telecom operators operate in a high-volume environment where customer acquisition is expensive and retention capacity is limited. The project focuses on an anonymous US telecom operator referred to in the source materials as **Company A**.
+
+### Business question
+
+> **Which customers should be prioritized for retention action, and what evidence supports that decision?**
+
+### Primary hypothesis
+
+The project investigates whether **device lifecycle / device age (`eqpdays`)** is strongly associated with churn and can therefore serve as an actionable intervention signal.
+
+The reasoning is operational rather than causal:
+
+**aging device → elevated observed churn risk → potential upgrade window → proposed retention intervention**
+
+The analysis does **not** establish that device age causes churn or that an upgrade reduces churn. Those questions require treatment-effect measurement.
+
+---
+
+## 3. End-to-End Data Science Architecture
+
+The project follows a complete analytical workflow rather than a single modeling notebook.
+
+```mermaid
+flowchart TB
+    A["Data Integration"] --> B["Quality & EDA"]
+    B --> C["Hypothesis Testing"]
+    C --> D["Feature Engineering"]
+    D --> E["Segmentation"]
+    E --> F["Model Benchmarking"]
+    F --> G["Optimization"]
+    G --> H["Ensemble"]
+    H --> I["Holdout Evaluation"]
+
+    classDef process fill:#24292f,color:#fff,stroke:#57606a;
+    classDef final fill:#0f8b8d,color:#fff,stroke:#0f8b8d;
+    class A,B,C,D,E,F,G,H process;
+    class I final;
 ```
 
----
+### Analytical stages
 
-## 30-Second Recruiter View
-
-| | |
-|---|---|
-| **Business problem** | Identify customers at risk of churn and prioritize the customers for whom retention intervention is economically worthwhile. |
-| **Dataset** | 100,000 customers · 100 raw fields · `Client.csv` + `Record.csv` |
-| **Data science** | EDA · statistical testing · feature engineering · KMeans · Gaussian Mixture Models |
-| **Modeling** | Logistic Regression · Random Forest · XGBoost · LightGBM · CatBoost |
-| **Optimization** | Optuna TPE search · 50 completed trials · early stopping |
-| **Final model** | Validation-weighted ensemble of 4 models |
-| **Primary metric** | PR-AUC |
-| **Holdout PR-AUC** | **0.6871** |
-| **Holdout recall** | **93.1%** |
-| **Lift @ top 10%** | **1.60×** |
-| **Decision framework** | Score → Rank → Trigger → Offer |
-| **Business layer** | Expected-value ranking + 3 retention ROI scenarios |
-
-### The key idea
-
-The model's output is **not the final deliverable**.
-
-A churn probability becomes useful only when it answers:
-
-> **Who should the business contact, when should it intervene, and is that intervention worth the cost?**
-
-Telecom Customer Churn & Retention Intelligence adds those decision layers on top of predictive modeling.
+| Stage                   | What was performed                                                                |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| **Data integration**    | `Client.csv` + `Record.csv` merged on `Customer_ID`                               |
+| **Data quality**        | Missingness, data types, distinct values, and issue-level audit                   |
+| **EDA**                 | Target balance, device lifecycle, service friction, phones, revenue, correlations |
+| **Statistics**          | Two-sample Kolmogorov–Smirnov tests across key numeric variables                  |
+| **Feature engineering** | 22 lifecycle, value, friction, behavioral, interaction, and segmentation features |
+| **Segmentation**        | KMeans `k=5` + diagonal-covariance GMM `k=5`                                      |
+| **Modeling**            | Logistic Regression, Random Forest, XGBoost, LightGBM, CatBoost                   |
+| **Optimization**        | Optuna TPE, 50 trials, LightGBM objective optimized for validation PR-AUC         |
+| **Ensemble**            | Validation-weighted blend of LightGBM, CatBoost, and optimized LightGBM           |
+| **Decision layer**      | Risk + value + lifecycle/actionability → ranked retention targets                 |
+| **Economics**           | Scenario-based expected preserved value, campaign cost, net value, and ROI        |
 
 ---
 
-# Why This Project Is Different
+## 4. Data & Data Quality
 
-Most churn projects end here:
+### Source data
 
-```text
-Customer → Churn Prediction
+The repository contains two CSV sources:
+
+* `telecom/Client.csv` — **100,000 rows × 50 columns**
+* `telecom/Record.csv` — **100,000 rows × 51 columns**
+
+They share `Customer_ID` and form a one-to-one customer-level modeling frame.
+
+After merging:
+
+* **100,000 customers**
+* **100 raw fields**
+* **0 duplicate customer IDs**
+* binary target: `churn`
+* churned: **49,562 (49.56%)**
+* retained: **50,438 (50.44%)**
+
+The target is therefore close to balanced, but **PR-AUC remains the primary ranking metric** because the business problem is targeted retention rather than generic accuracy maximization.
+
+<p align="center">
+  <img src="outputs/figures/02_target_balance.png" width="48%" alt="Target balance showing churned and retained customer counts">
+  <img src="outputs/figures/01_missingness_profile.png" width="48%" alt="Missingness profile across the telecom dataset">
+</p>
+
+### Missingness profile
+
+The largest missingness concentrations include:
+
+| Field        | Missing |
+| ------------ | ------: |
+| `numbcars`   |  49.37% |
+| `dwllsize`   |  38.31% |
+| `HHstatin`   |  37.92% |
+| `ownrent`    |  33.71% |
+| `dwlltype`   |  31.91% |
+| `lor`        |  30.19% |
+| `income`     |  25.44% |
+| `adults`     |  23.02% |
+| `infobase`   |  22.08% |
+| `hnd_webcap` |  10.19% |
+
+The preprocessing strategy uses:
+
+* numeric median imputation
+* missing-value indicators
+* categorical most-frequent imputation
+* one-hot encoding
+* scaling where required by the estimator
+
+The complete column-level audit is retained in `outputs/tables/data_quality_report.csv`.
+
+---
+
+## 5. Exploratory Analysis & Statistical Evidence
+
+The EDA was organized around four business themes:
+
+1. **Device lifecycle** — whether aging devices correspond to higher churn.
+2. **Service friction** — whether customer-care interaction is associated with churn.
+3. **Customer value** — how revenue and usage relate to churn behavior.
+4. **Account structure** — whether number of phones and related account characteristics differentiate customers.
+
+### Exploratory evidence
+
+<p align="center">
+  <img src="outputs/figures/03_eda_device_age_churn.png" width="48%" alt="Churn rate by device age band">
+  <img src="outputs/figures/05_eda_custcare_churn.png" width="48%" alt="Churn relationship with customer-care activity">
+</p>
+<p align="center">
+  <img src="outputs/figures/06_eda_phones_churn.png" width="48%" alt="Churn relationship with number of phones">
+  <img src="outputs/figures/08_correlation_heatmap.png" width="48%" alt="Correlation heatmap of key telecom variables">
+</p>
+
+### Device lifecycle finding
+
+Observed churn rises across the device-age bands:
+
+| Device age     | Observed churn |
+| -------------- | -------------: |
+| `<180` days    |         41.71% |
+| `180–365` days |         46.93% |
+| `365–730` days |         53.85% |
+| `730+` days    |         57.89% |
+
+The `730+` group has approximately **1.39×** the observed churn rate of the `<180` group.
+
+This is strong evidence of an association, but not proof of causality.
+
+### Statistical testing
+
+Two-sample KS tests were used to compare the distributions of selected numeric variables between churned and retained customers.
+
+| Feature         |       KS D | Interpretation                      |
+| --------------- | ---------: | ----------------------------------- |
+| `eqpdays`       | **0.1642** | strongest distributional separation |
+| `months`        |     0.1158 | meaningful separation               |
+| `totmrc_Mean`   |     0.0761 | moderate separation                 |
+| `mou_Mean`      |     0.0542 | smaller separation                  |
+| `custcare_Mean` |     0.0497 | smaller separation                  |
+| `phones`        |     0.0418 | smaller separation                  |
+| `rev_Mean`      |     0.0333 | small separation                    |
+| `ovrmou_Mean`   |     0.0254 | small separation                    |
+
+With 100,000 observations, extremely small p-values are expected even for modest differences. For interpretation, the **KS statistic / effect size** is more informative than treating statistical significance alone as evidence of business importance.
+
+> **Scientific caveat:** the analysis establishes association and distributional separation. It does not establish that device age causes churn, nor that a device upgrade causes retention.
+
+---
+
+## 6. Feature Engineering
+
+The notebook creates **22 engineered features** in addition to the original modeling variables. They are grouped by decision purpose rather than listed as an undifferentiated feature dump.
+
+| Category               | Engineered features                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Lifecycle**          | `device_age_band`, `eqpdays_months_interaction`, `eqpdays_per_month`, `device_age_relative`                           |
+| **Customer value**     | `clv_proxy`, `customer_value_score`, `revenue_per_phone`, `revenue_efficiency`                                        |
+| **Service friction**   | `custcare_per_month`, `custcare_intensity`, `device_age_customer_care`, `revenue_customer_care`, `satisfaction_proxy` |
+| **Behavior & revenue** | `overage_per_month`, `roaming_per_month`, `rev_per_mou`, `overage_intensity`, `roam_ratio`, `usage_efficiency`        |
+| **Account structure**  | `multi_line_flag`, `overage_tenure`                                                                                   |
+| **Segmentation**       | `kmeans_segment`, `gmm_segment`                                                                                       |
+
+The saved feature dictionaries provide the exact formulas and business meanings:
+
+* `outputs/tables/feature_dictionary.csv`
+* `outputs/tables/advanced_feature_dictionary.csv`
+
+### Important feature definitions
+
+* `clv_proxy = rev_Mean × months` — a historical customer-value proxy, not a full contractual CLV model.
+* `customer_value_score` — a train-derived percentile composite of revenue, tenure, and phone count.
+* `satisfaction_proxy = 1 / (1 + custcare_Mean + overage_intensity)` — a heuristic proxy, not a measured satisfaction score.
+* `device_age_relative` — device age normalized against the training-set median.
+
+These labels are intentionally qualified so that engineered proxies are not mistaken for directly observed business measures.
+
+---
+
+## 7. Leakage Prevention
+
+The workflow uses a stratified **64% / 16% / 20% train / validation / test split** with seed `42`.
+
+```mermaid
+flowchart TB
+    A["RAW DATA"] --> B["TRAIN / VALIDATION / TEST SPLIT"]
+    B --> C["TRAIN-DERIVED TRANSFORMATIONS"]
+    C --> D["VALIDATION / TEST TRANSFORM"]
+    D --> E["HOLDOUT EVALUATION"]
+
+    classDef source fill:#24292f,color:#fff,stroke:#57606a;
+    classDef transform fill:#0f8b8d,color:#fff,stroke:#0f8b8d;
+    classDef holdout fill:#1a7f37,color:#fff,stroke:#1a7f37;
+    class A,B source;
+    class C,D transform;
+    class E holdout;
 ```
 
-Telecom Customer Churn & Retention Intelligence continues:
+Leakage controls include:
 
-```text
-                  ┌──────────────────┐
-                  │  CHURN PROBABILITY│
-                  └────────┬─────────┘
-                           ↓
-                  ┌──────────────────┐
-                  │ CUSTOMER VALUE   │
-                  └────────┬─────────┘
-                           ↓
-                  ┌──────────────────┐
-                  │ EXPECTED VALUE   │
-                  └────────┬─────────┘
-                           ↓
-                  ┌──────────────────┐
-                  │ ACTIONABILITY    │
-                  │    TRIGGER       │
-                  └────────┬─────────┘
-                           ↓
-                  ┌──────────────────┐
-                  │ RETENTION OFFER  │
-                  └────────┬─────────┘
-                           ↓
-                  ┌──────────────────┐
-                  │ BUSINESS IMPACT  │
-                  └──────────────────┘
-```
+* preprocessing is fit on training data before validation/test transformation
+* percentile-based customer-value features use the training reference distribution
+* device-age normalization uses the training median
+* KMeans and GMM are fit on training data only
+* validation is used to select ensemble weights and the decision threshold
+* the final holdout is retained for evaluation
 
-This changes the project from a **classification exercise** into a **decision-support system**.
+### Reproducibility nuance
 
-The central operating framework is:
-
-# **SCORE → RANK → TRIGGER → OFFER**
-
-- **SCORE** — estimate churn risk for every customer.
-- **RANK** — prioritize customers by expected economic value, not risk alone.
-- **TRIGGER** — combine risk, value, and an actionable lifecycle condition.
-- **OFFER** — translate the priority list into a retention intervention.
+The notebook source and saved artifacts reflect a completed project run, but the repository does not retain every transient checkpoint generated during execution. A fresh run can therefore regenerate files and exact model scores depending on the available compute environment.
 
 ---
 
-# Business Problem
+## 8. Customer Segmentation
 
-Company A is a mature US telecom operator facing customer churn in a competitive market.
-
-The business challenge is not simply to build the most accurate classifier. A retention team has finite budget and limited capacity, so the real question is:
-
-> **Which customers should receive an intervention before they leave, and which of those interventions are economically justified?**
-
-The project's central business hypothesis focuses on **device lifecycle**:
-
-> Customers with aging devices may be more likely to churn, and a subsidized upgrade can provide an actionable intervention point while creating an opportunity for contract renewal.
-
-This hypothesis is tested statistically rather than treated as an assumption.
-
-The resulting system combines the device-lifecycle signal with broader behavioral and economic information:
-
-**Lifecycle + Usage + Revenue + Billing + Service Friction + Customer Value + Segmentation**
-
----
-
-# Project Architecture
-
-```text
-┌──────────────────────────────────────────────────────────────┐
-│                        BUSINESS CONTEXT                      │
-│          Telecom churn · retention · intervention cost       │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                     HYPOTHESIS FORMATION                     │
-│       Lifecycle · friction · value · account structure       │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                         DATA LAYER                           │
-│       Client.csv + Record.csv → 100,000 customers            │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                    DATA QUALITY + EDA                        │
-│      Missingness · distributions · churn patterns             │
-│                  · correlation analysis                       │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                    STATISTICAL VALIDATION                    │
-│          Two-sample KS tests across 8 numeric signals        │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                    FEATURE ENGINEERING                       │
-│       22 engineered features across lifecycle, value,        │
-│            friction, behavior, revenue, structure            │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                    CUSTOMER SEGMENTATION                     │
-│              KMeans (k=5) + GMM (k=5)                        │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                     MODEL TOURNAMENT                         │
-│  Logistic · RF · XGBoost · LightGBM · CatBoost · 5-fold CV  │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                  HYPERPARAMETER OPTIMIZATION                 │
-│                 Optuna TPE · 50 trials                       │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                     ENSEMBLE MODEL                           │
-│        Validation-weighted blend of 4 model outputs          │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                     HOLDOUT EVALUATION                       │
-│       PR-AUC · ROC-AUC · F1 · Precision · Recall · Lift     │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                   DECISION INTELLIGENCE                      │
-│        Risk × Value × Trigger × Intervention Economics       │
-└──────────────────────────────┬───────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────┐
-│                    RETENTION STRATEGY                        │
-│             Target customers → estimate value → act          │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
-
-# Project at a Glance
-
-| Dimension | Implementation |
-|---|---|
-| **Domain** | US telecom customer churn / retention economics |
-| **Customers** | 100,000 |
-| **Raw fields** | 100 |
-| **Target** | `churn` |
-| **Churn rate** | 49.56% |
-| **Engineered features** | 22 |
-| **Modeling frame** | 122 columns before encoding |
-| **Statistical test** | Two-sample Kolmogorov–Smirnov |
-| **Numeric hypotheses tested** | 8 |
-| **Segmentation** | KMeans + Gaussian Mixture |
-| **Clusters/components** | 5 + 5 |
-| **Model families** | 5 |
-| **Cross-validation** | 5-fold stratified CV |
-| **Hyperparameter optimizer** | Optuna / TPE |
-| **Optuna trials** | 50 |
-| **Final ensemble** | 4-model validation-weighted blend |
-| **Data split** | 64% train / 16% validation / 20% test |
-| **Random seed** | 42 |
-| **Primary metric** | PR-AUC |
-| **Final holdout PR-AUC** | **0.6871** |
-| **Final holdout ROC-AUC** | **0.6975** |
-| **Final holdout recall** | **93.12%** |
-| **Lift @ top 10%** | **1.60×** |
-| **Targeting rule** | Top decile by expected net value + `eqpdays > 350` |
-| **Business scenarios** | Conservative · Base · Aggressive |
-
----
-
-# The Data
-
-The modeling dataset is created by joining two confidential source files:
-
-```text
-Client.csv
-    │
-    │ Customer_ID
-    ▼
-Record.csv
-```
-
-### `Client.csv`
-
-Contains customer/account attributes such as:
-
-- demographics
-- household information
-- account structure
-- plan information
-- device information
-
-### `Record.csv`
-
-Contains behavioral and commercial information such as:
-
-- usage
-- revenue
-- recurring charges
-- overage
-- roaming
-- customer-care interactions
-- churn label
-
-The two sources are joined on:
-
-```text
-Customer_ID
-```
-
-The resulting dataset contains:
-
-**100,000 customers · 100 raw fields · 0 missing target values**
-
-The churn distribution is near-balanced:
-
-| Outcome | Customers | Share |
-|---|---:|---:|
-| Churned | 49,562 | 49.56% |
-| Retained | 50,438 | 50.44% |
-
-Although the classes are close to balanced, the project prioritizes **PR-AUC** because the eventual operational problem is ranking and targeting rather than maximizing generic classification accuracy.
-
----
-
-# Data Quality
-
-The raw data contains substantial missingness in several demographic and household fields.
-
-Examples include:
-
-| Feature | Approx. missing |
-|---|---:|
-| `numbcars` | 49.4% |
-| `dwllsize` | 38.3% |
-| `HHstatin` | 37.9% |
-| `ownrent` | 33.7% |
-| `dwlltype` | 31.9% |
-| `lor` | 30.2% |
-
-The pipeline does not simply delete incomplete customers.
-
-Instead, preprocessing uses:
-
-- median imputation for numeric features
-- most-frequent imputation for categorical features
-- explicit missing-indicator columns
-- scaling where appropriate
-- one-hot encoding for categorical variables
-
-The objective is to preserve useful information while preventing missingness from silently removing customers from the analysis.
-
----
-
-# Exploratory Data Analysis
-
-The EDA stage investigates the project's four main business themes:
-
-### 1. Device lifecycle
-
-Does churn increase as the customer's current device becomes older?
-
-### 2. Service friction
-
-Does repeated customer-care interaction indicate increasing churn risk?
-
-### 3. Customer value
-
-Do revenue and account economics change the importance of a churn event?
-
-### 4. Account structure
-
-Do multi-line accounts demonstrate different churn behavior?
-
-The EDA produces:
-
-- target-balance analysis
-- device-age churn analysis
-- customer-care analysis
-- account/phone-count analysis
-- revenue analysis
-- new-cell analysis
-- correlation heatmap
-- additional programmatically generated charts
-
-### The key discovery
-
-Churn increases across device-age bands:
-
-```text
-<180 days
-     ↓
-180–365 days
-     ↓
-365–730 days
-     ↓
-730+ days
-```
-
-The device lifecycle signal becomes particularly useful because it is not merely predictive—it is **actionable**.
-
-Unlike historical usage or revenue, device age can potentially be reset through an upgrade intervention.
-
-![Churn rate by device age](figures/03_eda_device_age_churn.png)
-
-![Correlation heatmap](figures/08_correlation_heatmap.png)
-
----
-
-# Hypothesis-Driven Statistical Analysis
-
-The project uses the **two-sample Kolmogorov–Smirnov test** to compare the full distributions of selected numeric variables between churned and retained customers.
-
-This is preferable to relying only on mean comparisons because several behavioral variables are skewed and the KS test does not require normality.
-
-### Tested variables
-
-- `eqpdays`
-- `months`
-- `totmrc_Mean`
-- `mou_Mean`
-- `custcare_Mean`
-- `phones`
-- `rev_Mean`
-- `ovrmou_Mean`
-
-### Results
-
-| Feature | KS statistic | p-value | Interpretation |
-|---|---:|---:|---|
-| `eqpdays` | **0.1642** | <0.001 | Strongest separation |
-| `months` | 0.1158 | <0.001 | Strong |
-| `totmrc_Mean` | 0.0761 | <0.001 | Moderate |
-| `mou_Mean` | 0.0542 | <0.001 | Moderate |
-| `custcare_Mean` | 0.0497 | <0.001 | Modest |
-| `phones` | 0.0418 | <0.001 | Modest |
-| `rev_Mean` | 0.0333 | <0.001 | Weakest of tested signals |
-| `ovrmou_Mean` | 0.0254 | <0.001 | Weak |
-
-The important number is the **KS statistic**, not simply the p-value. With 100,000 observations, very small differences can become statistically significant.
-
-### Key statistical finding
-
-`eqpdays` — device age — has the largest distributional separation:
-
-> **KS D = 0.1642**
-
-This supports device lifecycle as a major signal in the project's business hypothesis.
-
-### Important scientific caveat
-
-These tests establish **association, not causation**.
-
-The historical data shows that churners and non-churners have different device-age distributions. It does not prove that device aging causes churn or that an upgrade will cause a customer to stay.
-
-A causal claim would require experimentation or an appropriate quasi-experimental design.
-
----
-
-# Feature Engineering
-
-The project adds **22 domain-driven engineered features** to the 100 raw fields, producing a 122-column modeling frame before categorical encoding.
-
-The features are organized around business meaning rather than arbitrary transformations.
-
-## Lifecycle Signals
-
-```text
-device_age_band
-eqpdays_per_month
-eqpdays_months_interaction
-device_age_relative
-```
-
-These represent device maturity relative to customer tenure and the training population.
-
----
-
-## Customer Value Signals
-
-```text
-customer_value_score
-clv_proxy
-```
-
-`customer_value_score` combines revenue, tenure, and phone count using training-set percentile information.
-
-`clv_proxy` is:
-
-```text
-rev_Mean × months
-```
-
-It is deliberately treated as a **proxy**, not a full customer-lifetime-value model.
-
----
-
-## Service-Friction Signals
-
-```text
-custcare_per_month
-custcare_intensity
-device_age_customer_care
-```
-
-These capture both the frequency and accumulated intensity of customer-care interactions and their relationship with device lifecycle.
-
----
-
-## Behavioral & Revenue Signals
-
-```text
-revenue_per_phone
-revenue_efficiency
-rev_per_mou
-overage_intensity
-overage_per_month
-roam_ratio
-roaming_per_month
-overage_tenure
-revenue_customer_care
-satisfaction_proxy
-```
-
-These transform raw activity into interpretable customer-level ratios and interaction signals.
-
-`satisfaction_proxy` is a heuristic feature derived from friction and overage behavior; it is not an observed satisfaction survey measure.
-
----
-
-## Account Structure
-
-```text
-multi_line_flag
-```
-
-A simple structural feature identifying accounts with more than one phone line.
-
----
-
-## Segmentation Features
-
-```text
-kmeans_segment
-gmm_segment
-```
-
-These provide behavioral group structure that is then available to the supervised models.
-
----
-
-# Leakage Prevention
-
-A central design requirement is preventing information from validation or test data from influencing training.
-
-The pipeline follows a split-first principle.
-
-```text
-RAW DATA
-   ↓
-TRAIN / VALIDATION / TEST
-   ↓
-Train-derived transformations
-   ↓
-Validation / Test transformed using fitted objects
-```
-
-### Leakage controls include
-
-- deterministic train/validation/test splitting
-- training-only percentile calculations
-- training-only median reference values
-- segmentation fit on training data only
-- validation/test assignment using already-fitted clustering models
-- preprocessing fitted on training data before transformation
-- hyperparameter optimization restricted to training/validation
-- ensemble weight optimization using validation probabilities
-- threshold selection on validation data
-- final evaluation on an untouched test set
-
-The final test set contains **20,000 customers** and is reserved for final reporting.
-
----
-
-# Customer Segmentation
-
-Supervised churn prediction is complemented with unsupervised behavioral segmentation.
-
-Two methods are used:
+Segmentation is used as a **behavior/value lens**, not as a replacement for churn prediction.
 
 ### KMeans
 
-```text
-k = 5
-```
+* `k = 5`
+* training-only fit
+* standardized behavioral/value feature matrix
+* `n_init = 20`
 
 ### Gaussian Mixture Model
 
-```text
-components = 5
-covariance = diagonal
-```
+* `5` components
+* diagonal covariance
+* training-only fit
+* probabilistic cohort assignment
 
-Both are fitted using standardized behavioral/value features on the training split.
+The fitted segmentation objects are retained in:
 
-The segmentation incorporates variables including:
+`outputs/models/customer_segmentation_models.joblib`
 
-- device age
-- tenure
-- customer-care usage
-- overage
-- roaming
-- revenue
-- minutes of use
-- recurring charge
-- phone count
-- customer value
-- revenue efficiency
+Segment profiles are available in:
 
-The resulting:
+`outputs/tables/customer_segment_profiles.csv`
 
-```text
-kmeans_segment
-gmm_segment
-```
-
-are used as modeling features and also support customer-segment profiling.
-
-This adds a second analytical perspective:
-
-> **Who is likely to churn?**
-
-becomes:
-
-> **What kind of customer is likely to churn?**
+The purpose is to identify customer cohorts with different combinations of churn, revenue, device age, and service behavior so that retention ranking can be interpreted in business context.
 
 ---
 
-# Model Development
+## 9. Model Development
 
-Five model families are benchmarked:
+Five model families were benchmarked:
 
-1. Logistic Regression
-2. Random Forest
-3. XGBoost
-4. LightGBM
-5. CatBoost
+* Logistic Regression
+* Random Forest
+* XGBoost
+* LightGBM
+* CatBoost
 
-The models are evaluated using **5-fold stratified cross-validation** and then evaluated on the final held-out test set.
+The benchmark uses **5-fold stratified cross-validation**, with PR-AUC as the primary model-selection lens.
 
-## Model Tournament
+```mermaid
+flowchart LR
+    A["PREPARED<br/>MATRIX"] --> B["LOGISTIC"]
+    A --> C["RANDOM<br/>FOREST"]
+    A --> D["XGBOOST"]
+    A --> E["LIGHTGBM"]
+    A --> F["CATBOOST"]
+    B --> G["BENCHMARK"]
+    C --> G
+    D --> G
+    E --> G
+    F --> G
+    G --> H["OPTUNA<br/>LIGHTGBM"]
+    H --> I["VALIDATION-WEIGHTED<br/>ENSEMBLE"]
+    I --> J["20K<br/>HOLDOUT"]
 
-| Model | Test PR-AUC | Test ROC-AUC | Test F1 | Precision | Recall |
-|---|---:|---:|---:|---:|---:|
-| LightGBM | 0.6822 | 0.6944 | 0.6676 | 0.6039 | 0.7463 |
-| XGBoost | 0.6813 | 0.6928 | 0.6816 | 0.5730 | 0.8410 |
-| CatBoost | 0.6795 | 0.6918 | 0.6859 | 0.5629 | 0.8778 |
-| Random Forest | 0.6578 | 0.6750 | 0.6596 | 0.5919 | 0.7450 |
-| Logistic Regression | 0.6244 | 0.6440 | 0.6704 | 0.5185 | 0.9482 |
+    classDef input fill:#24292f,color:#fff,stroke:#57606a;
+    classDef model fill:#334155,color:#fff,stroke:#57606a;
+    classDef opt fill:#0f8b8d,color:#fff,stroke:#0f8b8d;
+    classDef final fill:#1a7f37,color:#fff,stroke:#1a7f37;
+    class A input;
+    class B,C,D,E,F,G model;
+    class H,I opt;
+    class J final;
+```
 
-The boosted-tree models perform closely, while the tree ensembles substantially outperform the linear baseline on the primary ranking metric.
+### Benchmark results
+
+The repository's `model_benchmark_expanded.csv` records the following holdout results:
+
+| Model               | Test PR-AUC | Test ROC-AUC |     F1 | Precision | Recall |
+| ------------------- | ----------: | -----------: | -----: | --------: | -----: |
+| **LightGBM**        |  **0.6819** |   **0.6950** | 0.6642 |    0.6089 | 0.7305 |
+| **XGBoost**         |      0.6818 |       0.6940 | 0.6837 |    0.5787 | 0.8353 |
+| **CatBoost**        |      0.6812 |       0.6930 | 0.6865 |    0.5754 | 0.8506 |
+| Random Forest       |      0.6572 |       0.6742 | 0.6549 |    0.5943 | 0.7292 |
+| Logistic Regression |      0.6251 |       0.6450 | 0.6705 |    0.5245 | 0.9293 |
+
+The benchmark demonstrates why model selection cannot be reduced to a single metric: the models trade precision, recall, and ranking quality differently.
 
 ---
 
-# Why PR-AUC?
+## 10. Hyperparameter Optimization
 
-The project uses **PR-AUC / Average Precision** as its primary metric.
+LightGBM was selected for deeper optimization using **Optuna** with a **TPE sampler** and a **50-trial** budget.
 
-The reason is operational.
+The objective maximizes validation **PR-AUC**.
 
-A retention campaign does not act on every customer equally. It acts on a prioritized list.
+Key search dimensions include:
 
-The model therefore needs to answer:
+* `n_estimators`: 350–1200
+* `learning_rate`: 0.015–0.12, log-scaled
+* `num_leaves`: 24–128
+* `max_depth`: 3–12
+* `min_child_samples`: 20–220
+* `subsample`: 0.65–1.00
+* `colsample_bytree`: 0.65–1.00
+* `reg_alpha`: `1e-4`–10
+* `reg_lambda`: `1e-4`–10
 
-> **Can true churners consistently appear near the top of the ranking?**
+The optimization history is retained as:
 
-PR-AUC measures ranking quality across decision thresholds and is therefore closely aligned with the eventual targeting use case.
+<p align="center">
+  <img src="outputs/figures/18_optuna_optimization_history.png" width="72%" alt="Optuna LightGBM validation PR-AUC optimization history">
+</p>
 
-ROC-AUC remains useful as a complementary discrimination metric.
+The saved Optuna artifact is:
 
----
+`outputs/models/optuna_lightgbm.joblib`
 
-# Hyperparameter Optimization
+The corresponding saved metrics are in:
 
-LightGBM is optimized using **Optuna** with a TPE sampler.
+`outputs/tables/optuna_final_metrics.csv`
 
-### Configuration
+### Saved Optuna result
 
-```text
-Optimizer:       Optuna
-Sampler:         TPESampler
-Seed:            42
-Trials:          50
-Objective:       Validation PR-AUC
-Early stopping:  Enabled
-```
+| Metric            |      Value |
+| ----------------- | ---------: |
+| Test PR-AUC       | **0.6843** |
+| Test ROC-AUC      | **0.6956** |
+| F1                | **0.6895** |
+| Precision         |     55.49% |
+| Recall            |     91.02% |
+| Threshold         |     0.3411 |
+| Validation PR-AUC |     0.6897 |
+| Completed trials  |         50 |
 
-The search explores:
-
-```text
-n_estimators
-learning_rate
-num_leaves
-max_depth
-min_child_samples
-subsample
-colsample_bytree
-reg_alpha
-reg_lambda
-```
-
-The optimized LightGBM reaches:
-
-```text
-PR-AUC  = 0.6857
-ROC-AUC = 0.6962
-F1      = 0.6866
-Precision = 0.5423
-Recall    = 0.9354
-```
-
-This makes it the strongest individual model in the project before ensemble blending.
-
-![Optuna optimization history](figures/18_optuna_optimization_history.png)
+> **Implementation note:** the saved `optuna_final_metrics.csv` records `device_type=cpu`, while the current notebook source contains GPU flags for LightGBM. This is a reproducibility detail worth resolving before treating a fresh rerun as byte-for-byte equivalent to the retained artifact.
 
 ---
 
-# Ensemble Modeling
+## 11. Ensemble Modeling
 
-Instead of relying entirely on one model, Telecom Customer Churn & Retention Intelligence combines complementary model outputs.
+The final saved champion is a **validation-weighted ensemble**.
 
-The final validation-weighted ensemble contains:
+The ensemble search evaluates weight combinations on the validation set using PR-AUC and then selects the decision threshold using validation F1.
 
-| Model | Weight |
-|---|---:|
-| Optuna LightGBM | **75%** |
-| XGBoost | **10%** |
-| CatBoost | **10%** |
-| LightGBM | **5%** |
+The retained `weighted_ensemble.joblib` records these non-zero weights:
 
-Weights are searched exhaustively over a discretized grid in 0.05 increments, with validation PR-AUC as the optimization objective.
+| Component       |  Weight |
+| --------------- | ------: |
+| Optuna LightGBM | **80%** |
+| LightGBM        | **15%** |
+| CatBoost        |  **5%** |
 
-Conceptually:
+XGBoost participated in the ensemble search but received zero weight in the retained solution.
 
-```text
-                 Optuna LightGBM
-                       75%
-                        │
-XGBoost 10% ────────────┤
-                        ├──→ ENSEMBLE SCORE
-CatBoost 10% ───────────┤
-                        │
-LightGBM 5% ────────────┘
-```
+The saved champion artifact is:
 
-The purpose is not to combine models for the sake of complexity.
+`outputs/models/weighted_ensemble.joblib`
 
-The boosted-tree families capture overlapping but not identical customer patterns, allowing the blend to retain the strongest model while adding complementary corrections.
+Its retained decision threshold is approximately **0.3415**.
+
+### Why blend?
+
+The benchmark models have similar ranking performance but different error profiles. Blending allows the final predictor to combine complementary probability estimates instead of relying entirely on one estimator family.
 
 ---
 
-# Final Model Performance
+## 12. Final Model Performance
 
-## Champion: ValidationWeightedEnsemble
+### Champion: `ValidationWeightedEnsemble`
 
-The final model is evaluated once on the **20,000-customer held-out test set**.
+The authoritative metrics reported by the **current notebook and retained model artifacts** are:
 
-| Metric | Result |
-|---|---:|
-| **PR-AUC** | **0.687082** |
-| **ROC-AUC** | **0.697498** |
-| **F1-score** | **0.687549** |
-| **Precision** | **54.50%** |
-| **Recall** | **93.12%** |
-| **Lift @ Top 10%** | **1.60×** |
-| Decision threshold | **0.3084** |
+<table>
+<tr>
+<td align="center"><strong>0.6850</strong><br/>PR-AUC</td>
+<td align="center"><strong>0.6956</strong><br/>ROC-AUC</td>
+<td align="center"><strong>0.6895</strong><br/>F1</td>
+</tr>
+<tr>
+<td align="center"><strong>55.49%</strong><br/>precision</td>
+<td align="center"><strong>91.02%</strong><br/>recall</td>
+<td align="center"><strong>1.59×</strong><br/>lift @ top 10%</td>
+</tr>
+</table>
 
-### What does 93.1% recall mean?
+**Decision threshold:** approximately `0.3415`
+**Evaluation set:** 20,000 holdout customers
 
-At the selected operating threshold, the system identifies approximately **93% of observed churners in the held-out test set**.
+<p align="center">
+  <img src="outputs/figures/09_model_precision_recall.png" width="48%" alt="Precision-recall curves for the churn modeling workflow">
+  <img src="outputs/figures/10_model_roc_curve.png" width="48%" alt="ROC curves for the churn modeling workflow">
+</p>
+<p align="center">
+  <img src="outputs/figures/11_confusion_matrix.png" width="48%" alt="Confusion matrix for the champion churn model">
+  <img src="outputs/figures/12_lift_chart.png" width="48%" alt="Lift chart showing concentration of churn in the highest-risk decile">
+</p>
 
-The trade-off is precision:
+### How to read the result
 
-> roughly 54.5% of customers flagged at the operating threshold are observed churners.
+The high recall reflects the project's retention objective: it is preferable to surface a broad set of potential churners when downstream retention action is available, rather than optimize for precision alone.
 
-For a retention system where missing a genuine churn opportunity can be more costly than contacting a customer who would have stayed anyway, the project intentionally favors recall.
-
-![Precision-recall curve](figures/09_model_precision_recall.png)
-
-![ROC curve](figures/10_model_roc_curve.png)
-
-![Confusion matrix](figures/11_confusion_matrix.png)
-
-![Lift chart](figures/12_lift_chart.png)
-
----
-
-# Model Interpretation
-
-The final ensemble is dominated by Optuna LightGBM, so its gain-based feature importance provides a useful view into the model's internal signal hierarchy.
-
-### Top features from the executed model
-
-| Rank | Feature | Signal type |
-|---|---|---|
-| 1 | `change_mou` | Usage trend |
-| 2 | `change_rev` | Revenue trend |
-| 3 | `totmrc_Mean` | Billing |
-| 4 | `eqpdays_per_month` | Lifecycle |
-| 5 | `revenue_per_phone` | Behavioral |
-| 6 | `avgrev` | Revenue |
-| 7 | `mouowylisv_Mean` | Usage |
-| 8 | `avgqty` | Usage |
-| 9 | `avgmou` | Usage |
-| 10 | `mouiwylisv_Mean` | Usage |
-| 11 | `rev_per_mou` | Behavioral |
-| 12 | `mou_Mean` | Usage |
-| 13 | `unan_vce_Mean` | Usage |
-| 14 | `eqpdays_months_interaction` | Lifecycle |
-| 15 | `mou_cvce_Mean` | Usage |
-
-This is an important distinction:
-
-**Device lifecycle is the project's actionable business hypothesis, but the predictive model learns from a much broader set of behavioral, revenue, billing, and lifecycle signals.**
-
-The statistical analysis independently identifies `eqpdays` as the strongest distribution-separating numeric variable, while the final tree model also incorporates usage and revenue trends heavily.
-
-![Feature importance](figures/19_feature_importance.png)
+That trade-off also means the model should **rank customers and attach economics to the ranking**, rather than treating the classification threshold as the final business decision.
 
 ---
 
-# The Device Lifecycle Discovery
+## 13. Model Interpretation
 
-The project centers on a particularly actionable pattern:
+The project combines statistical evidence with model interpretation rather than treating feature importance as a substitute for analysis.
 
-```text
-Device age
-    ↓
-Increasing churn association
-    ↓
-Observed inflection around older devices
-    ↓
-Define an actionable intervention window
-    ↓
-Offer upgrade / renewal
-```
+<p align="center">
+  <img src="outputs/figures/13_xgb_feature_importance.png" width="48%" alt="XGBoost feature importance ranking">
+  <img src="outputs/figures/15_shap_summary_bar.png" width="48%" alt="SHAP summary bar chart for churn-risk interpretation">
+</p>
 
-The campaign trigger is:
+The saved feature-importance table is:
 
-```text
-eqpdays > 350
-```
+`outputs/tables/feature_importance.csv`
 
-This threshold is designed to identify customers entering an actionable device-lifecycle window rather than waiting until the device is already substantially older.
+### Two different questions
 
-The important scientific distinction remains:
+**Statistical analysis asks:**
 
-> **Device age is an actionable predictive signal, not proven causal treatment evidence.**
+> Which variables show the strongest distributional separation between churned and retained customers?
 
-The project therefore treats the upgrade program as a business hypothesis to be tested, not as a guaranteed causal solution.
+Here, `eqpdays` is the strongest KS separator with **D = 0.1642**.
 
-![Device age vs churn](figures/03_eda_device_age_churn.png)
+**Predictive modeling asks:**
+
+> Which combination of variables helps the model rank churn risk accurately?
+
+That broader signal includes usage, revenue, billing, customer-care, lifecycle, and engineered interaction variables.
+
+This distinction prevents a common analytical mistake: assuming that the strongest univariate statistical separator must also be the only important predictive feature.
 
 ---
 
-# From Model to Decision
+## 14. Device Lifecycle Discovery
 
-This is the core of Telecom Customer Churn & Retention Intelligence.
+Device age is the project's clearest analytical case study.
 
-## 1. SCORE
+<p align="center">
+  <img src="outputs/figures/03_eda_device_age_churn.png" width="72%" alt="Observed churn increasing across device-age bands">
+</p>
 
-Score the customer base with the final ensemble.
+The observed pattern is monotonic across the defined bands:
 
-```text
-customer → p_churn
-```
+`<180` → `180–365` → `365–730` → `730+`
 
-The system produces a risk score for each customer.
+with churn increasing from **41.71%** to **57.89%**.
+
+The notebook's business recommendation uses an operational lifecycle trigger around the **365-day** region, while the statistical analysis establishes that device age is associated with churn.
+
+### What this means
+
+**Evidence:** older devices correspond to higher observed churn.
+**Actionability:** device age can be monitored as a potential intervention trigger.
+**Causality:** not established by this project.
+
+> The correct interpretation is **“device age is an actionable predictive signal”**, not **“device aging causes churn.”**
 
 ---
 
-## 2. RANK
+## 15. Decision Intelligence
 
-Risk alone is insufficient.
+This is the project's signature layer: the model's probability becomes a retention decision only after risk is combined with customer value and actionability.
 
-A customer with a high probability of churn may not be the best retention target if the potential economic value is low.
+```mermaid
+flowchart TB
+    A["SCORE<br/><b>p(churn)</b>"] --> B["RANK<br/><b>Expected Net Value</b>"]
+    B --> C["TRIGGER<br/><b>Risk + Value + Actionability</b>"]
+    C --> D["OFFER<br/><b>Upgrade + Renewal</b>"]
+    D --> E["MODELED<br/><b>Economic Impact</b>"]
 
-The project therefore ranks customers using:
-
-```text
-Expected Net Value
+    classDef score fill:#24292f,color:#fff,stroke:#57606a;
+    classDef decision fill:#0f8b8d,color:#fff,stroke:#0f8b8d;
+    classDef outcome fill:#1a7f37,color:#fff,stroke:#1a7f37;
+    class A score;
+    class B,C,D decision;
+    class E outcome;
 ```
 
-The core calculation is:
+### 1. SCORE
+
+The ensemble produces a predicted churn probability:
+
+`p_churn`
+
+This is the model's estimate of risk, not an estimate of treatment response.
+
+### 2. RANK
+
+Customers are ranked using **expected net value**, so the system can distinguish between:
+
+* high-risk / low-value customers
+* high-risk / high-value customers
+* lower-risk / high-value customers
+* customers where the intervention is unlikely to be economically attractive
+
+### 3. TRIGGER
+
+The operational decision layer combines:
+
+* predicted churn risk
+* customer value
+* device lifecycle
+* service-friction signals
+* campaign economics
+
+The notebook recommendation emphasizes the top decile by expected net value and device age above the lifecycle threshold, with service recovery considered for high `custcare_Mean` accounts.
+
+### 4. OFFER
+
+The modeled intervention is a **subsidized device upgrade + contract renewal**, with service recovery as an additional action for relevant accounts.
+
+This is a proposed intervention, not an experimentally validated treatment.
+
+<p align="center">
+  <img src="outputs/figures/17_priority_scatter.png" width="78%" alt="Retention priority scatter showing predicted churn risk against customer value">
+</p>
+
+---
+
+## 16. Expected-Value Framework
+
+The decision layer converts churn risk into an economic ranking.
+
+```mermaid
+flowchart TB
+    A["Predicted<br/>churn risk"] --> F["Expected<br/>Net Value"]
+    B["Monthly<br/>revenue"] --> F
+    C["Acceptance<br/>assumption"] --> F
+    D["Retention<br/>horizon"] --> F
+    E["Margin"] --> F
+    G["Campaign<br/>cost"] --> F
+    F --> H["Customer<br/>ranking"]
+
+    classDef input fill:#24292f,color:#fff,stroke:#57606a;
+    classDef value fill:#0f8b8d,color:#fff,stroke:#0f8b8d;
+    classDef output fill:#1a7f37,color:#fff,stroke:#1a7f37;
+    class A,B,C,D,E,G input;
+    class F value;
+    class H output;
+```
+
+### Formula
 
 ```text
 expected_preserved_value
-=
-p_churn
-× acceptance_rate
-× retained_months
-× monthly_revenue
-× margin
+= p_churn
+  × acceptance_rate
+  × retained_months
+  × monthly_revenue
+  × gross_margin_multiplier
+```
 
+Then:
+
+```text
 expected_net_value
-=
-expected_preserved_value
-− campaign_cost
+= expected_preserved_value − campaign_cost
 ```
 
-This converts:
+The result is a **scenario-based economic prioritization score**, not a causal revenue forecast.
 
-```text
-"How likely are they to churn?"
-```
+### Observed vs assumed
 
-into:
+| Observed / modeled from data | Assumed for scenario planning |
+| ---------------------------- | ----------------------------- |
+| `p_churn`                    | acceptance rate               |
+| `rev_Mean`                   | retained months               |
+| customer ranking             | subsidy cost                  |
+| top-decile targeting         | marketing cost                |
+| churn lift                   | gross-margin multiplier       |
 
-```text
-"How much expected economic value is associated with retaining them?"
-```
+This separation is essential: the model supplies risk and customer-level information; the business scenario supplies assumptions about what happens after intervention.
 
 ---
 
-## 3. TRIGGER
+## 17. Modeled Business Impact
 
-The retention campaign combines economic priority with the actionable device lifecycle signal.
+The business layer evaluates three scenarios using the top 10% of the holdout population by expected net value.
 
-A customer is targeted when:
+<p align="center">
+  <img src="outputs/figures/16_business_roi_waterfall.png" width="72%" alt="Modeled net value across conservative, base, and aggressive retention scenarios">
+</p>
 
-```text
-eqpdays > 350
-AND
-customer falls within the top decile by expected net value
-```
+### Scenario summary
 
-This creates a two-dimensional decision rule:
-
-```text
-          HIGH CUSTOMER VALUE
-                  ▲
-                  │
-            TARGET ZONE
-                  │
-                  │
-                  │
-LOW RISK ─────────┼───────── HIGH RISK
-                  │
-                  │
-                  ▼
-          LOW CUSTOMER VALUE
-```
-
-The system is therefore designed to prioritize:
-
-**high-risk + high-value + actionable customers**
-
-rather than simply selecting the highest churn probabilities.
-
-![Retention priority](figures/17_priority_scatter.png)
-
----
-
-# 4. OFFER
-
-The modeled intervention is:
-
-> **A subsidized device upgrade paired with an 18-month contract renewal.**
-
-The business case tests the intervention under three scenarios rather than presenting a single artificially precise financial estimate.
-
----
-
-# Expected-Value Framework
-
-The model combines observed customer information with explicit business assumptions.
-
-### Observed from the dataset
-
-- `p_churn`
-- `rev_Mean`
-- customer ranking
-- behavioral characteristics
-- device lifecycle
-
-### Assumed for scenario planning
-
-- acceptance rate
-- retained-month horizon
-- subsidy + marketing cost
-- gross-margin multiplier
-
-| Variable | Conservative | Base | Aggressive |
-|---|---:|---:|---:|
-| Acceptance rate | 20% | **30%** | 40% |
-| Retained months | 12 | **18** | 24 |
-| Cost / customer | $45 | **$65** | $85 |
-| Gross-margin multiplier | 0.80 | **1.00** | 1.10 |
-
-These assumptions are explicitly separated from observed data.
-
----
-
-# Modeled Business Impact
-
-> ⚠️ **These are modeled scenario estimates, not realized production results.**
-
-The calculation is applied to the held-out test population.
-
-The top 10% by expected net value are targeted, corresponding to **2,000 customers** in the 20,000-customer test set.
-
-| Scenario | Acceptance | Retained months | Cost / customer | Campaign cost | Modeled net value | Modeled ROI |
-|---|---:|---:|---:|---:|---:|---:|
-| Conservative | 20% | 12 | $45 | $90,000 | $235,406 | 2.62× |
-| **Base ★** | **30%** | **18** | **$65** | **$130,000** | **$785,205** | **6.04×** |
-| Aggressive | 40% | 24 | $85 | $170,000 | $1,619,735 | 9.53× |
+| Scenario     |  Targeted | Acceptance | Retained months | Campaign cost |    Net value |       ROI |
+| ------------ | --------: | ---------: | --------------: | ------------: | -----------: | --------: |
+| Conservative |     2,000 |        20% |              12 |       $90,000 |     $234,874 |     2.61× |
+| **Base**     | **2,000** |    **30%** |          **18** |  **$130,000** | **$783,707** | **6.03×** |
+| Aggressive   |     2,000 |        40% |              24 |      $170,000 |   $1,616,804 |     9.51× |
 
 ### Base scenario
 
-```text
-2,000 targeted customers
-        ↓
-$130K campaign cost
-        ↓
-$785K modeled net value
-        ↓
-6.04× modeled ROI
-```
+**2,000 targeted customers**
+→ **$130K campaign cost**
+→ **$913.7K modeled gross preserved value**
+→ **$783.7K modeled net value**
+→ **6.03× modeled ROI**
 
-These figures should be interpreted as **decision-model outputs**, not realized revenue.
+> **MODELED — NOT REALIZED**
 
-A live campaign, treatment-control experiment, or validated causal model would be required to estimate incremental financial impact.
+These figures are scenario outputs generated from assumptions. They should not be presented as revenue already generated or ROI already achieved.
 
-![Business ROI](figures/16_business_roi_waterfall.png)
+The source table is:
+
+`outputs/tables/business_impact_summary.csv`
 
 ---
 
-# Why the Business Layer Matters
+## 18. Production Thinking
 
-The same churn model can produce very different business decisions depending on how its predictions are consumed.
+The project intentionally distinguishes what exists in the current repository from what would be required for production deployment.
 
-Consider two customers:
+| Area            | Current project                          | Production requirement                        |
+| --------------- | ---------------------------------------- | --------------------------------------------- |
+| Scoring         | Saved ensemble artifact                  | Scheduled scoring service / batch job         |
+| Preprocessing   | Saved preprocessor                       | Versioned feature pipeline                    |
+| Monitoring      | Not implemented                          | Drift, calibration, performance monitoring    |
+| Calibration     | Not established as a production control  | Calibration analysis and monitoring           |
+| Experimentation | Not implemented                          | Randomized treatment/control testing          |
+| Uplift          | Not implemented                          | Individual treatment-effect / uplift modeling |
+| Governance      | Analytical documentation                 | Model registry, approvals, audit trail        |
+| Privacy         | Source data currently present in archive | Formal data-access and retention controls     |
 
-```text
-Customer A
-High churn probability
-Low revenue
-Low expected retention value
-
-Customer B
-Slightly lower churn probability
-High revenue
-High expected retention value
-```
-
-A probability-only system may prioritize Customer A.
-
-A decision system can prioritize Customer B if:
-
-```text
-Expected Value(Customer B)
->
-Expected Value(Customer A)
-```
-
-That is the central transformation:
-
-> **Prediction tells you what may happen. Decision intelligence helps determine what to do about it.**
+The project therefore demonstrates **production thinking** without claiming to be a production deployment.
 
 ---
 
-# Risk & Production Thinking
-
-The repository does not pretend that a notebook is a production system.
-
-Several production risks are explicitly identified.
-
-| Risk | Why it matters | Proposed direction |
-|---|---|---|
-| **Cannibalization** | Some customers would renew without an intervention | A/B testing + uplift modeling |
-| **Offer fatigue** | Repeated offers can reduce acceptance | 90-day suppression window |
-| **Model drift** | Device and customer behavior can change over time | Rolling retraining + monitoring |
-| **Data pipeline risk** | Incorrect or delayed lifecycle data can affect triggers | Automated data-quality alerts |
-
-These controls are **proposed production extensions**, not implemented features.
-
-That distinction is intentional.
-
----
-
-# Limitations
-
-A strong Data Science system should clearly state what it does **not** prove.
+## 19. Limitations
 
 ### 1. Modeled, not realized, financial impact
 
-ROI estimates come from applying a business formula to historical holdout data under explicit assumptions.
-
-They are not observed campaign revenue.
+ROI depends on assumptions for acceptance, retained months, margin, and intervention cost.
 
 ### 2. No causal treatment effect
 
-The analysis shows associations between customer characteristics and churn.
-
-It does not establish that an upgrade will cause a customer to remain.
+High churn probability does not mean an intervention will reduce churn.
 
 ### 3. No live A/B experiment
 
-A randomized experiment is required to estimate the incremental retention effect of the intervention.
+The project does not contain randomized treatment/control outcomes.
 
 ### 4. Probability calibration
 
-The model is optimized for ranking and threshold performance. Its raw scores have not undergone a dedicated calibration procedure and should not automatically be interpreted as perfectly calibrated probabilities.
+The primary emphasis is ranking performance. Production deployment should validate calibration if probabilities are used as economically meaningful probabilities.
 
 ### 5. Deployment
 
-The repository contains a notebook-based analytical pipeline rather than a production API, scheduled scoring service, or monitoring platform.
+No live scoring service, monitoring stack, model registry, or production feature store is included.
 
 ### 6. Dataset generalization
 
-The analysis is based on a single historical telecom dataset. Findings should be revalidated before being transferred to another operator, market, plan mix, or device ecosystem.
+The source is an anonymized historical telecom dataset associated with an anonymous operator. Performance should be revalidated against current operational data before deployment.
 
 ---
 
-# Future Roadmap
+## 20. Future Roadmap
 
-Telecom Customer Churn & Retention Intelligence already covers the major stages of an end-to-end Data Science workflow. The next step is to move from predictive decision support toward measurable intervention optimization.
+### Phase 1 — Productionization
 
-## Phase 1 — Productionization
+* package preprocessing + scoring into a versioned pipeline
+* schedule batch scoring
+* add model registry and artifact versioning
+* add monitoring and alerting
 
-```text
-Notebook
-   ↓
-Modular pipeline
-   ↓
-Scheduled batch scoring
-   ↓
-CRM / campaign integration
+### Phase 2 — Model Reliability
+
+* probability calibration
+* subgroup performance checks
+* drift monitoring
+* threshold stability analysis
+* model retraining policy
+
+### Phase 3 — Causal Measurement
+
+* define eligible retention population
+* randomize treatment/control groups
+* measure incremental retention
+* measure incremental revenue and intervention cost
+
+### Phase 4 — Uplift Modeling
+
+```mermaid
+flowchart LR
+    A["ELIGIBLE<br/>CUSTOMERS"] --> B["RANDOMIZED<br/>TREATMENT / CONTROL"]
+    B --> C["RETENTION<br/>OUTCOMES"]
+    C --> D["INCREMENTAL<br/>EFFECT"]
+    D --> E["UPLIFT<br/>MODEL"]
+    E --> F["OPTIMIZED<br/>INTERVENTION"]
+
+    classDef base fill:#24292f,color:#fff,stroke:#57606a;
+    classDef future fill:#0f8b8d,color:#fff,stroke:#0f8b8d;
+    class A,B,C,D base;
+    class E,F future;
 ```
 
-## Phase 2 — Model reliability
-
-- probability calibration
-- automated data-quality checks
-- drift monitoring
-- scheduled retraining
-- model/version tracking
-
-## Phase 3 — Causal measurement
-
-Run a randomized retention experiment:
-
-```text
-Eligible customers
-       │
-       ├──────────────┐
-       ↓              ↓
- Treatment         Control
-       │              │
-       ↓              ↓
- Upgrade offer     No offer
-       │              │
-       └──────┬───────┘
-              ↓
-       Compare retention
-```
-
-This would transform:
-
-> **association**
-
-into an estimate of:
-
-> **incremental retention effect**
-
-## Phase 4 — Uplift Modeling
-
-The next-generation model should answer:
-
-```text
-Who will churn?
-        +
-Who will respond to an intervention?
-        ↓
-Who should actually receive the intervention?
-```
-
-This directly addresses cannibalization and moves the system from:
-
-**churn prediction**
-
-toward:
-
-**treatment optimization**.
+The causal roadmap is explicitly **future work**. It is the natural next step for answering the question the current project cannot answer: **who is actually persuadable by the intervention?**
 
 ---
 
-# End-to-End Data Science Scope
+## 21. End-to-End Data Science Scope
 
-Telecom Customer Churn & Retention Intelligence demonstrates the following capabilities in one integrated workflow:
+| Capability                | Evidence in the project                                                                 |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| **Data Engineering**      | Two-source integration, schema inspection, customer-level merge                         |
+| **Data Quality**          | Missingness profiling, column-level quality report, preprocessing controls              |
+| **Statistics**            | Two-sample KS tests and effect-size-oriented interpretation                             |
+| **EDA**                   | Target balance, lifecycle, service, revenue, phone-count, correlation analysis          |
+| **Feature Engineering**   | 22 engineered lifecycle, value, friction, behavioral, interaction, and segment features |
+| **Unsupervised Learning** | KMeans `k=5`, Gaussian Mixture Model `k=5`                                              |
+| **Supervised Learning**   | Logistic Regression, Random Forest, XGBoost, LightGBM, CatBoost                         |
+| **Optimization**          | Optuna TPE, 50-trial LightGBM search                                                    |
+| **Ensemble Learning**     | Validation-weighted probability blend                                                   |
+| **Evaluation**            | PR-AUC, ROC-AUC, F1, precision, recall, threshold, lift, confusion matrix               |
+| **Interpretation**        | Feature importance, SHAP summary, logistic coefficients, statistical evidence           |
+| **Decision Science**      | Risk/value/actionability ranking and retention trigger logic                            |
+| **Business Analytics**    | Expected preserved value, campaign cost, net value, scenario ROI                        |
+| **Production Thinking**   | Leakage controls, reproducibility, privacy, monitoring roadmap, causal roadmap          |
 
-### Data Engineering
-- Multi-source customer-level data integration
-- Key validation
-- Data-quality auditing
-- Missing-data treatment
-
-### Statistics
-- Hypothesis-driven analysis
-- Distribution comparison
-- Kolmogorov–Smirnov testing
-- Effect-size interpretation
-
-### Exploratory Data Analysis
-- Churn segmentation
-- Device lifecycle analysis
-- Revenue analysis
-- Customer-care behavior
-- Account structure
-- Correlation analysis
-
-### Feature Engineering
-- Lifecycle features
-- Revenue ratios
-- Behavioral features
-- Service-friction features
-- Customer-value features
-- Interaction terms
-- Training-derived transformations
-
-### Unsupervised Learning
-- KMeans clustering
-- Gaussian Mixture Models
-- Behavioral segment profiling
-
-### Supervised Learning
-- Logistic Regression
-- Random Forest
-- XGBoost
-- LightGBM
-- CatBoost
-
-### Model Optimization
-- Optuna
-- TPE sampling
-- Early stopping
-- Hyperparameter search
-
-### Ensemble Learning
-- Validation-weighted blending
-- Grid-search weight optimization
-
-### Model Evaluation
-- PR-AUC
-- ROC-AUC
-- F1
-- Precision
-- Recall
-- Lift
-- Confusion matrix
-- Precision-recall curves
-- ROC curves
-
-### Model Interpretation
-- Gain-based feature importance
-- Business interpretation of predictive signals
-
-### Decision Science
-- Customer prioritization
-- Expected-value ranking
-- Actionability triggers
-
-### Business Analytics
-- Campaign economics
-- Cost assumptions
-- Retained-value scenarios
-- ROI modeling
-
-### Production Thinking
-- Model drift
-- Data-quality monitoring
-- Suppression logic
-- Calibration
-- A/B testing
-- Uplift modeling
+This breadth is intentional: the project covers the full path from **raw customer data to an economically framed decision**.
 
 ---
 
-# Technology Stack
+## 22. Technology Stack
 
-### Language
+**Language**
+Python 3.11/3.12 target environment
 
-**Python 3.11**
+**Data & Scientific Computing**
+Pandas · NumPy · SciPy
 
-### Data
+**Visualization**
+Matplotlib · Seaborn
 
-- pandas
-- NumPy
-- PyArrow
+**Machine Learning**
+Scikit-learn · XGBoost · LightGBM · CatBoost
 
-### Statistics
+**Optimization**
+Optuna / TPE
 
-- SciPy
+**Model Persistence**
+Joblib
 
-### Machine Learning
+**Notebook / Analysis**
+Jupyter Notebook
 
-- scikit-learn
-- LightGBM
-- XGBoost
-- CatBoost
+**Data Artifacts**
+CSV · Parquet checkpoints generated during execution
 
-### Optimization
-
-- Optuna
-
-### Visualization
-
-- Matplotlib
-- Seaborn
-
-### Model Persistence
-
-- Joblib
-
-### Compute
-
-The notebook was executed in Google Colab using GPU-enabled builds of:
-
-- LightGBM
-- XGBoost
-- CatBoost
-
-CPU-only environments are also supported by the same libraries, although training may be slower.
+Dependencies are pinned in `requirements.txt`.
 
 ---
 
-# Repository Structure
+## 23. Repository Structure
+
+The following structure is verified against the supplied repository archive:
 
 ```text
-telecom-customer-churn-retention-intelligence/
-│
+.
 ├── README.md
-├── LICENSE
-├── CITATION.cff
 ├── requirements.txt
 ├── .gitignore
 │
 ├── notebooks/
-│   └── project_horizon.ipynb
-│
-├── reports/
-│   ├── project_summary.pdf
-│   └── final_presentation.pdf
-│
-├── docs/
-│   ├── hypotheses.md
-│   ├── methodology.md
-│   └── business-case.md
-│
-└── figures/
-    ├── 01_missingness_profile.png
-    ├── 02_target_balance.png
-    ├── 03_eda_device_age_churn.png
-    ├── 04_eda_new_cell_churn.png
-    ├── 05_eda_custcare_churn.png
-    ├── 06_eda_phones_churn.png
-    ├── 07_eda_revenue_churn.png
-    ├── 08_correlation_heatmap.png
-    ├── 09_model_precision_recall.png
-    ├── 10_model_roc_curve.png
-    ├── 11_confusion_matrix.png
-    ├── 12_lift_chart.png
-    ├── 16_business_roi_waterfall.png
-    ├── 17_priority_scatter.png
-    ├── 18_optuna_optimization_history.png
-    └── 19_feature_importance.png
-```
-
-### Where to start
-
-**For the full implementation:**  
-`notebooks/project_horizon.ipynb`
-
-**For methodology:**  
-`docs/methodology.md`
-
-**For hypotheses:**  
-`docs/hypotheses.md`
-
-**For the business case:**  
-`docs/business-case.md`
-
-**For executive communication:**  
-`reports/final_presentation.pdf`
-
----
-
-# Reproducibility
-
-The main analytical workflow is contained in:
-
-```text
-notebooks/project_horizon.ipynb
-```
-
-### Reproducibility configuration
-
-```text
-Random seed: 42
-Split:       64% train / 16% validation / 20% test
-```
-
-The seed is applied to the relevant random processes and model configurations.
-
-### Required data
-
-Because the underlying telecom dataset is confidential, the raw CSVs are not included.
-
-To reproduce the notebook locally, the expected structure is:
-
-```text
-telecom-customer-churn-retention-intelligence/
+│   └── YasminWalid.ipynb
 │
 ├── telecom/
 │   ├── Client.csv
 │   └── Record.csv
 │
-└── notebooks/
-    └── project_horizon.ipynb
+├── outputs/
+│   ├── figures/
+│   │   ├── 01_missingness_profile.png
+│   │   ├── 02_target_balance.png
+│   │   ├── 03_eda_device_age_churn.png
+│   │   ├── 04_eda_new_cell_churn.png
+│   │   ├── 05_eda_custcare_churn.png
+│   │   ├── 06_eda_phones_churn.png
+│   │   ├── 07_eda_revenue_churn.png
+│   │   ├── 08_correlation_heatmap.png
+│   │   ├── 09_model_precision_recall.png
+│   │   ├── 10_model_roc_curve.png
+│   │   ├── 11_confusion_matrix.png
+│   │   ├── 12_lift_chart.png
+│   │   ├── 13_xgb_feature_importance.png
+│   │   ├── 14_logistic_coefficients.png
+│   │   ├── 15_shap_summary_bar.png
+│   │   ├── 16_business_roi_waterfall.png
+│   │   ├── 17_priority_scatter.png
+│   │   └── 18_optuna_optimization_history.png
+│   │
+│   ├── models/
+│   │   ├── advanced_preprocessor.joblib
+│   │   ├── customer_segmentation_models.joblib
+│   │   ├── optuna_lightgbm.joblib
+│   │   └── weighted_ensemble.joblib
+│   │
+│   └── tables/
+│       ├── advanced_feature_dictionary.csv
+│       ├── business_impact_summary.csv
+│       ├── customer_segment_profiles.csv
+│       ├── data_quality_report.csv
+│       ├── feature_dictionary.csv
+│       ├── feature_importance.csv
+│       ├── model_benchmark_expanded.csv
+│       ├── model_comparison.csv
+│       ├── optuna_final_metrics.csv
+│       └── top_risk_customers.csv
+│
+├── docs/
+│   ├── Telecom_Dataset_Intelligence_Report.md
+│   └── business_driver_report.md
+│
+└── deliverables/
+    ├── Project_Horizon_Board_Presentation.pptx
+    └── YasminWalid.pdf
 ```
 
-The notebook can then discover the two source files and execute the pipeline.
+### Where to start
 
-### GPU vs CPU
-
-The original execution used GPU-enabled versions of the boosting libraries.
-
-A compatible CPU environment can run the workflow as well, although:
-
-- training will take longer
-- floating-point behavior can vary slightly
-- optimization paths can differ across environments
-
-Because the dataset is confidential and cannot be redistributed, **full external reproduction of the exact numerical run is not guaranteed without access to the original data**.
+| Need                         | Start here                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------- |
+| Understand the full workflow | `notebooks/YasminWalid.ipynb`                                                       |
+| Inspect data quality         | `outputs/tables/data_quality_report.csv`                                            |
+| Inspect feature definitions  | `outputs/tables/advanced_feature_dictionary.csv`                                    |
+| Compare models               | `outputs/tables/model_benchmark_expanded.csv`                                       |
+| Inspect optimized LightGBM   | `outputs/tables/optuna_final_metrics.csv` + `outputs/models/optuna_lightgbm.joblib` |
+| Inspect final ensemble       | `outputs/models/weighted_ensemble.joblib`                                           |
+| Inspect retention economics  | `outputs/tables/business_impact_summary.csv`                                        |
+| Read dataset context         | `docs/Telecom_Dataset_Intelligence_Report.md`                                       |
+| Read business interpretation | `docs/business_driver_report.md`                                                    |
 
 ---
 
-# Data Privacy
+## 24. Reproducibility
 
-The raw customer data is confidential and is intentionally excluded from this public repository.
+### Environment
 
-### Do not commit
+Create an isolated Python environment and install the pinned requirements:
 
-```text
-Client.csv
-Record.csv
+```bash
+python -m pip install -r requirements.txt
 ```
 
-or any derivative file containing customer-level records.
+### Run
 
-This includes row-level exports such as:
+From the repository root, open:
 
 ```text
-top_risk_customers.csv
+notebooks/YasminWalid.ipynb
 ```
 
-### Safe repository contents
+The notebook uses deterministic seed:
 
-The public repository can contain:
+```text
+42
+```
 
-- source code
-- notebook logic
-- feature definitions
-- aggregated tables
-- charts
-- documentation
-- reports
-- presentation materials
+The intended split is:
 
-The objective is to demonstrate the complete analytical methodology without exposing individual customer information.
+```text
+64,000 train
+16,000 validation
+20,000 holdout test
+```
+
+### Required data
+
+The notebook expects:
+
+```text
+telecom/Client.csv
+telecom/Record.csv
+```
+
+### Compute
+
+The notebook contains GPU-related configuration for LightGBM/XGBoost in parts of the modeling workflow, but the retained Optuna metrics artifact records CPU execution. A fresh environment should therefore verify the actual available device configuration before comparing results directly with the saved artifacts.
+
+### Reproducibility limitation
+
+A deterministic seed does not guarantee identical results across different library builds, hardware, GPU/CPU backends, or reruns that regenerate optimization artifacts. The committed model artifacts and CSV outputs should be treated as the evidence for the supplied run.
 
 ---
 
-# Results & Versioning Note
+## 25. Data Privacy
 
-The project contains supporting deliverables generated from different executions of the analytical pipeline.
+The current supplied repository archive **does contain the two source CSV files** under `telecom/` and the generated `top_risk_customers.csv` contains customer-level scored records.
 
-For the public-facing repository, the **executed notebook outputs are treated as the computational source of truth** for the headline metrics and business scenario shown in this README.
+That means the present archive should **not automatically be treated as a public-safe release** merely because the source describes the operator as anonymous.
 
-The authoritative current run is:
+Before publishing this repository publicly, review:
 
-```text
-Champion:
-ValidationWeightedEnsemble
+* whether `Client.csv` and `Record.csv` are licensed for redistribution
+* whether customer-level fields should be removed
+* whether `Customer_ID` should be excluded
+* whether `outputs/tables/top_risk_customers.csv` should be removed or anonymized
+* whether generated model artifacts encode information that requires access controls
 
-PR-AUC:
-0.687082
-
-ROC-AUC:
-0.697498
-
-Recall:
-93.12%
-
-Ensemble:
-75% Optuna LightGBM
-10% XGBoost
-10% CatBoost
-5% LightGBM
-
-Base modeled net value:
-$785,205
-
-Base modeled ROI:
-6.04×
-```
-
-Earlier project artifacts may contain different values because they represent previous executions of the pipeline.
-
-This distinction is documented intentionally rather than silently mixing results from different runs.
-
-For detailed methodology and business assumptions, see:
-
-```text
-docs/methodology.md
-docs/business-case.md
-```
+For a public portfolio release, the safer pattern is to retain the **methodology, aggregate results, figures, model documentation, and synthetic or approved sample data**, while excluding restricted customer-level records.
 
 ---
 
-# References
+## 26. Results & Versioning Note
 
-### Algorithms & Libraries
+### Authoritative current-run sources
 
-- Ke et al. (2017), **LightGBM: A Highly Efficient Gradient Boosting Decision Tree**
-- Chen & Guestrin (2016), **XGBoost: A Scalable Tree Boosting System**
-- Prokhorenkova et al. (2018), **CatBoost: Unbiased Boosting with Categorical Features**
-- Akiba et al. (2019), **Optuna: A Next-generation Hyperparameter Optimization Framework**
-- Pedregosa et al. (2011), **Scikit-learn: Machine Learning in Python**
-- Harris et al. (2020), **Array programming with NumPy**
-- McKinney (2010), **Data Structures for Statistical Computing in Python**
+For the repository supplied with this README, the strongest sources of truth are:
 
-### Market Context
+1. `notebooks/YasminWalid.ipynb`
+2. `outputs/models/weighted_ensemble.joblib`
+3. `outputs/tables/optuna_final_metrics.csv`
+4. `outputs/tables/model_benchmark_expanded.csv`
+5. `outputs/tables/business_impact_summary.csv`
 
-- GSMA Intelligence (2025), *The Mobile Economy 2025*
-- Bain & Company (2024), *Telecom Retention Economics*
+### Metric reconciliation
 
-### Dataset
+An earlier README iteration referenced a different set of headline values, including **0.687082 PR-AUC**, **0.697498 ROC-AUC**, **93.12% recall**, threshold **0.3084**, and a **$785,205 / 6.04×** base-case result.
 
-GCI World (2026), Company A dataset:
+Those exact values are **not present in the current repository's authoritative notebook/output artifacts**. The current notebook and saved artifacts instead report approximately:
 
-```text
-Client.csv
-Record.csv
-```
+* **0.685036 holdout PR-AUC**
+* **0.695620 holdout ROC-AUC**
+* **0.689465 F1**
+* **55.49% precision**
+* **91.02% recall**
+* **~0.3415 retained ensemble threshold**
+* **1.59× lift @ top 10%**
+* **$783,707 modeled base net value**
+* **6.03× modeled base ROI**
 
-Confidential and not redistributed.
-
----
-
-# License
-
-The code, documentation, and analysis in this repository are released under the **MIT License**.
-
-See:
-
-```text
-LICENSE
-```
-
-The underlying customer dataset is confidential and is **not covered by the public repository license**.
+This README intentionally uses the **repository-backed values** rather than silently carrying forward stale numbers.
 
 ---
 
-# Citation
+## 27. References
 
-If you reference Telecom Customer Churn & Retention Intelligence, see:
+### Project documentation
 
-```text
-CITATION.cff
-```
+* [`docs/Telecom_Dataset_Intelligence_Report.md`](docs/Telecom_Dataset_Intelligence_Report.md)
+* [`docs/business_driver_report.md`](docs/business_driver_report.md)
+* [`notebooks/YasminWalid.ipynb`](notebooks/YasminWalid.ipynb)
 
----
+### Technical references
 
-# Final Takeaway
+* Scikit-learn — model evaluation, preprocessing, pipelines, clustering
+* LightGBM — gradient boosting framework
+* XGBoost — gradient boosting framework
+* CatBoost — categorical-aware gradient boosting framework
+* Optuna — hyperparameter optimization
+* SHAP — model explanation framework
 
-Telecom Customer Churn & Retention Intelligence was built around a simple idea:
+### GitHub rendering
 
-> **Predicting churn is useful. Knowing whom to save, when to act, and whether the intervention is worth paying for is more useful.**
-
-The project connects the full chain:
-
-```text
-BUSINESS QUESTION
-       ↓
-HYPOTHESIS
-       ↓
-DATA
-       ↓
-STATISTICS
-       ↓
-EDA
-       ↓
-FEATURE ENGINEERING
-       ↓
-SEGMENTATION
-       ↓
-MODEL BENCHMARKING
-       ↓
-OPTUNA
-       ↓
-ENSEMBLE
-       ↓
-HOLDOUT EVALUATION
-       ↓
-INTERPRETATION
-       ↓
-RISK × VALUE
-       ↓
-RETENTION DECISION
-       ↓
-ECONOMIC IMPACT
-```
-
-That is the scope of Telecom Customer Churn & Retention Intelligence:
-
-**not just predicting who leaves — but building the analytical machinery required to decide who is worth saving.**
+This README uses standard GitHub-flavored Markdown, HTML image sizing, tables, and Mermaid code fences. GitHub supports Mermaid diagrams directly inside Markdown files.
 
 ---
 
-*Built as a final Data Science project for GCI World 2026.*
+## 28. License & Citation
+
+### License
+
+No `LICENSE` file is present in the supplied repository archive.
+
+Therefore, the repository currently has **no explicit open-source license file**. If the project is intended for public reuse, add an appropriate `LICENSE` before publishing it as an open-source project.
+
+### Citation
+
+No `CITATION.cff` file is present in the supplied repository archive.
+
+If formal citation support is desired, add a `CITATION.cff` containing the author, project title, repository URL, and release/version information.
+
+---
+
+## Final Takeaway
+
+> **Predicting churn is useful. Knowing whom to prioritize, when to act, and whether the intervention is worth paying for is more useful.**
+
+**Telecom Customer Churn & Retention Intelligence** connects:
+
+**Business Problem → Data → Evidence → Modeling → Validation → Decision → Business Impact**
+
+It demonstrates an end-to-end Data Science workflow in which machine learning is not the endpoint. The endpoint is a **defensible decision framework** that combines statistical evidence, predictive risk, customer value, operational triggers, and scenario-based retention economics—while keeping causal claims and financial impact appropriately qualified.
