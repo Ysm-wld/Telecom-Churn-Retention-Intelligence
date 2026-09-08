@@ -1,0 +1,15 @@
+feature,formula,business_meaning
+eqpdays_months_interaction,eqpdays * months,Lifecycle depth: older devices across longer tenure.
+eqpdays_per_month,eqpdays / (months + 1),Device age normalized by account tenure.
+device_age_relative,eqpdays / median(eqpdays),Relative device age versus portfolio norm.
+custcare_per_month,custcare_Mean / (months + 1),Service-friction rate.
+overage_per_month,ovrmou_Mean / (months + 1),Billing-friction rate.
+roaming_per_month,roam_Mean / (months + 1),Roaming exposure rate.
+revenue_per_phone,rev_Mean / (phones + 1),Revenue intensity per device line.
+revenue_efficiency,rev_Mean / (mou_Mean + 1),Revenue generated per usage unit.
+customer_value_score,"mean(percentile rev_Mean, months, phones)",Composite economic value score.
+device_age_customer_care,eqpdays * custcare_Mean,Interaction: aging device and service friction.
+overage_tenure,ovrmou_Mean * months,Interaction: accumulated overage pressure.
+revenue_customer_care,rev_Mean * custcare_Mean,Interaction: valuable customers with support pain.
+kmeans_segment,KMeans(n_clusters=5),Behavior/value segment assignment.
+gmm_segment,GaussianMixture(n_components=5),Probabilistic segment assignment.

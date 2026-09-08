@@ -1,0 +1,10 @@
+feature,formula,business_meaning
+device_age_band,"bin(eqpdays): <180, 180-365, 365-730, 730+",Device lifecycle replacement window.
+multi_line_flag,phones > 1,Account structure/household stickiness.
+rev_per_mou,rev_Mean / (mou_Mean + 1),Revenue intensity per usage minute.
+overage_intensity,ovrrev_Mean / (totmrc_Mean + 1),Billing friction relative to recurring charge.
+roam_ratio,roam_Mean / (mou_Mean + 1),Roaming exposure relative to usage.
+custcare_intensity,custcare_Mean * months,Cumulative service friction.
+usage_efficiency,mou_Mean / (totmrc_Mean + 1),Usage received per recurring dollar.
+clv_proxy,rev_Mean * months,Observed customer value proxy.
+satisfaction_proxy,1 / (1 + custcare_Mean + overage_intensity),Inverse service and billing friction proxy.
